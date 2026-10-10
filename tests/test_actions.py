@@ -87,9 +87,19 @@ def test_changing_one_button_leaves_all_other_slots_and_profiles_alone():
 
 @pytest.mark.parametrize("text", ["disabled", "left", "right", "middle", "back", "forward",
                                   "dpi-up", "dpi-down", "key:a", "key:f5", "key:ctrl+c",
-                                  "key:ctrl+shift+a", "key:alt+tab", "key:super+1"])
+                                  "key:ctrl+shift+a", "key:alt+tab", "key:super+1",
+                                  "key:ctrl", "key:super", "key:-", "key:."])
 def test_parse_and_describe_round_trip(text):
     assert actions.describe(actions.parse(text)) == text
+
+
+def test_modifier_alone_is_a_key():
+    assert actions.parse("key:ctrl") == Key(0xE0)
+    assert actions.parse("key:shift") == Key(0xE1)
+    assert actions.parse("key:alt") == Key(0xE2)
+    assert actions.parse("key:super") == Key(0xE3)
+    block = ButtonBlock(load("buttons_f5_default"))
+    assert actions.encode(block, Key(0xE0)) == (0x21E0, 0x20E0)
 
 
 def test_parse_is_case_and_space_insensitive():

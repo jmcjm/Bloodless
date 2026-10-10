@@ -159,3 +159,48 @@ def test_the_save_pause_pumps_the_main_loop():
         assert ran == [True]
 
     drive(check)
+
+
+def test_key_dialog_builds_a_combo_from_toggles():
+    def check(window, _mouse):
+        window.button_rows["forward"][1].set_text("")   # open on an empty combination
+        dialog = window.new_key_dialog("forward")
+        assert dialog.combo_text() == ""                  # nothing selected, Apply disabled
+        assert not dialog.apply_button.get_sensitive()
+        dialog.mod_toggles["ctrl"].set_active(True)
+        dialog.mod_toggles["shift"].set_active(True)
+        dialog.key_toggles["t"].set_active(True)
+        assert dialog.combo_text() == "ctrl+shift+t"
+        assert dialog.apply_button.get_sensitive()
+        dialog.key_toggles["y"].set_active(True)         # a second key deselects the first
+        assert dialog.combo_text() == "ctrl+shift+y"
+        assert not dialog.key_toggles["t"].get_active()
+        dialog.key_toggles["y"].set_active(False)
+        dialog.mod_toggles["shift"].set_active(False)
+        assert dialog.combo_text() == "ctrl"              # a modifier alone is a valid combo
+
+    drive(check)
+
+
+def test_key_dialog_presets_the_current_entry_text():
+    def check(window, _mouse):
+        window.button_rows["forward"][1].set_text("ctrl+shift+t")
+        dialog = window.new_key_dialog("forward")
+        assert dialog.mod_toggles["ctrl"].get_active()
+        assert dialog.mod_toggles["shift"].get_active()
+        assert not dialog.mod_toggles["alt"].get_active()
+        assert dialog.key_toggles["t"].get_active()
+        assert not dialog.key_toggles["y"].get_active()
+
+    drive(check)
+
+
+def test_keys_dialog_apply_writes_the_choice_to_the_entry():
+    def check(window, mouse):
+        dialog = window.new_key_dialog("forward")
+        dialog.mod_toggles["ctrl"].set_active(True)
+        dialog.key_toggles["v"].set_active(True)
+        dialog.apply_button.emit("clicked")
+        assert window.button_rows["forward"][1].get_text() == "ctrl+v"
+        window.apply()
+        assert described(mouse)["forward"] == "key:ctrl+v"

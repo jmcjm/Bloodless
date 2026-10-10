@@ -9,7 +9,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
-from . import choices, config, dpi  # noqa: E402
+from . import actions, choices, config, dpi  # noqa: E402
+from .actions import Key  # noqa: E402
 from .blocks import BlockError  # noqa: E402
 from .protocol import Mouse, WriteError  # noqa: E402
 from .transport import DeviceError  # noqa: E402
@@ -17,6 +18,25 @@ from .transport import DeviceError  # noqa: E402
 BUTTON_TITLES = {"back": "Side button: back", "forward": "Side button: forward",
                  "top1": "Top button 1", "topn": "Top button N", "top3": "Top button 3"}
 ERRORS = (DeviceError, BlockError, WriteError, ValueError)
+
+# Rows of an ordinary physical keyboard (QWERTY); names are actions.KEYS names.
+KEYBOARD_ROWS = [
+    ("esc", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"),
+    ("`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "backspace"),
+    ("tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"),
+    ("a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "enter"),
+    ("shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/"),
+    ("ctrl", "alt", "space", "super"),
+    ("insert", "home", "pageup", "up", "delete", "end", "pagedown", "left", "down", "right"),
+]
+MODIFIER_KEYS = ("ctrl", "shift", "alt", "super")
+KEY_LABELS = {"esc": "Esc", "backspace": "Bksp", "tab": "Tab", "enter": "Enter",
+              "shift": "Shift", "ctrl": "Ctrl", "alt": "Alt", "super": "Super",
+              "space": "Space", "insert": "Ins", "home": "Home", "pageup": "PgUp",
+              "delete": "Del", "end": "End", "pagedown": "PgDn",
+              "up": "↑", "down": "↓", "left": "←", "right": "→"}
+KEY_LABELS.update({f"f{n}": f"F{n}" for n in range(1, 13)})
+SPACE_COLUMNS = 6  # the space bar spans several key widths, like on a real keyboard
 
 
 def demo_mouse():
@@ -31,9 +51,85 @@ def demo_mouse():
                  sleep=lambda seconds: None)
 
 
+class KeyDialog(Adw.Dialog):
+    """Pick a key combination by clicking keys on a picture of a keyboard."""
+
+    def __init__(self, window, name):
+        super().__init__(title="Choose keys")
+        self.window, self.name = window, name
+        self.mod_toggles, self.key_toggles = {}, {}
+        mods, key_name = [], None
+        text = window.button_rows[name][1].get_text().strip()
+        if text:
+            try:
+                action = actions.parse("key:" + text)
+            except ValueError:
+                action = None
+            if isinstance(action, Key):
+                mods = [n for n, b in actions.MOD_BITS.items() if action.modifiers & b]
+                key_name = next((n for n, u in actions.KEYS.items() if u == action.usage), None)
+                if not mods and key_name in MODIFIER_KEYS:  # a lone modifier, e.g. "ctrl"
+                    mods, key_name = [key_name], None
+        grid = Gtk.Grid(row_spacing=6, column_spacing=6)
+        for r, row in enumerate(KEYBOARD_ROWS):
+            c = 0
+            for key in row:
+                label = KEY_LABELS.get(key, key.upper())
+                width = SPACE_COLUMNS if key == "space" else 1
+                toggle = Gtk.ToggleButton(label=label, hexpand=True)
+                grid.attach(toggle, c, r, width, 1)
+                c += width
+                if key in MODIFIER_KEYS:
+                    self.mod_toggles[key] = toggle
+                    toggle.set_active(key in mods)
+                    toggle.connect("toggled", self._on_toggled)
+                else:
+                    self.key_toggles[key] = toggle
+                    toggle.set_active(key == key_name)
+                    toggle.connect("toggled", self._on_key_toggled)
+        cancel = Gtk.Button(label="Cancel")
+        cancel.connect("clicked", lambda _b: self.close())
+        self.apply_button = Gtk.Button(label="Apply", css_classes=["suggested-action"])
+        self.apply_button.connect("clicked", lambda _b: self.write_back())
+        buttons = Gtk.Box(spacing=6, halign=Gtk.Align.END)
+        buttons.append(cancel)
+        buttons.append(self.apply_button)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                        margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+        outer.append(grid)
+        outer.append(buttons)
+        self.set_child(outer)
+        self._update()
+
+    def _on_key_toggled(self, toggle):
+        if toggle.get_active():  # at most one ordinary key at a time
+            for other in self.key_toggles.values():
+                if other is not toggle:
+                    other.set_active(False)
+        self._update()
+
+    def _on_toggled(self, _toggle):
+        self._update()
+
+    def _update(self):
+        self.apply_button.set_sensitive(bool(self.combo_text()))
+
+    def combo_text(self):
+        """The selected combination as text for the entry row, e.g. 'ctrl+shift+t'."""
+        mods = [n for n in MODIFIER_KEYS if self.mod_toggles[n].get_active()]
+        keys = [n for n, t in self.key_toggles.items() if t.get_active()]
+        return "+".join(mods + keys[:1])
+
+    def write_back(self):
+        text = self.combo_text()
+        if text:
+            self.window.button_rows[self.name][1].set_text(text)
+        self.close()
+
+
 class Window(Adw.ApplicationWindow):
     def __init__(self, app, open_mouse):
-        super().__init__(application=app, title="Bloodless", default_width=520, default_height=760)
+        super().__init__(application=app, title="Bloodless", default_width=1020, default_height=760)
         self.open_mouse = open_mouse
         self.mouse = None
 
@@ -60,6 +156,9 @@ class Window(Adw.ApplicationWindow):
         for name, title in BUTTON_TITLES.items():
             combo = Adw.ComboRow(title=title, model=labels)
             entry = Adw.EntryRow(title="Key combination, e.g. ctrl+c")
+            keys_button = Gtk.Button(label="Keys…", valign=Gtk.Align.CENTER)
+            keys_button.connect("clicked", lambda _b, n=name: self.open_key_dialog(n))
+            entry.add_suffix(keys_button)
             combo.connect("notify::selected", self.on_choice_changed, entry)
             button_group.add(combo)
             button_group.add(entry)
@@ -90,6 +189,14 @@ class Window(Adw.ApplicationWindow):
 
     def on_choice_changed(self, combo, _param, entry):
         entry.set_visible(combo.get_selected() == choices.KEY_INDEX)
+
+    def new_key_dialog(self, name):
+        return KeyDialog(self, name)
+
+    def open_key_dialog(self, name):
+        dialog = KeyDialog(self, name)
+        dialog.present(self)
+        return dialog
 
     def _gtk_sleep(self, seconds):
         """Sleep like time.sleep, but keep the UI alive by pumping the main loop."""
