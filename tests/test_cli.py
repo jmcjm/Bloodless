@@ -51,7 +51,7 @@ def test_backlight(mouse):
 
 
 @pytest.mark.parametrize("argv", [("set-button", "back", "key:nope"), ("set-dpi", "9", "800"),
-                                   ("set-dpi", "1", "850"), ("backlight", "7")])
+                                  ("set-dpi", "1", "850"), ("backlight", "7")])
 def test_bad_input_is_an_error_message_and_writes_nothing(mouse, transport, argv):
     code, out, err = run(mouse, *argv)
     assert code == 1

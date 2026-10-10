@@ -17,9 +17,21 @@ def open_mouse():
     devices = find_devices()
     if not devices:
         raise DeviceError("no Bloody mouse found (is it plugged in?)")
-    mouse = Mouse(HidrawTransport(devices[0]))
-    check_supported(mouse.info())
-    return mouse
+    first_error = None
+    for path in devices:
+        transport = None
+        try:
+            transport = HidrawTransport(path)
+            mouse = Mouse(transport)
+            check_supported(mouse.info())
+        except OSError as e:
+            if transport is not None:
+                transport.close()
+            if first_error is None:
+                first_error = e
+            continue
+        return mouse
+    raise first_error
 
 
 def check_supported(info):
@@ -35,6 +47,10 @@ def get_buttons(block, profile=1):
 def set_button(block, name, action, profile=1):
     if name not in BUTTONS:
         raise ValueError(f"unknown button {name!r}, expected one of {', '.join(BUTTONS)}")
+    if profile != 1 and block.shares_table(profile):
+        raise ValueError(f"profile {profile} shares its button table with another profile "
+                         "(the vendor app splits the tables after its first remap); "
+                         "edit profile 1 instead")
     block.set_slot(profile, BUTTONS[name], *actions.encode(block, action))
 
 

@@ -98,6 +98,13 @@ def test_add_sequence_refuses_when_block_is_full():
     ButtonBlock(block.to_words())
 
 
+def test_shares_table():
+    shared = ButtonBlock(load("buttons_f5_default"))
+    assert all(shared.shares_table(p) for p in (1, 2, 3))
+    split = ButtonBlock(load("buttons_ef_original"))
+    assert not any(split.shares_table(p) for p in (1, 2, 3))
+
+
 @pytest.mark.parametrize("damage", [
     lambda w: w.__setitem__(40, w[40] ^ 1),           # flipped bit -> checksum
     lambda w: w.__delitem__(slice(8, None)),          # truncated
@@ -143,5 +150,13 @@ def test_level_index_out_of_range():
 def test_damaged_sensitivity_block_is_rejected():
     words = load("sens_ef_original")
     words[10] ^= 1
+    with pytest.raises(BlockError):
+        SensitivityBlock(words)
+
+
+@pytest.mark.parametrize("fill", [0, 0xFFFF])
+def test_erased_or_zeroed_sensitivity_block_is_rejected(fill):
+    words = load("sens_ef_original")
+    words[:] = [fill] * len(words)
     with pytest.raises(BlockError):
         SensitivityBlock(words)

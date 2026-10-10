@@ -58,6 +58,11 @@ class ButtonBlock:
     def _profile_ptr(self, profile):
         return self.words[self.words[self.H_PROFILES] + profile - 1]
 
+    def shares_table(self, profile):
+        """True when this profile's button table is also another profile's table."""
+        ptr = self._profile_ptr(profile)
+        return any(self._profile_ptr(p) == ptr for p in (1, 2, 3) if p != profile)
+
     def _slot_index(self, profile, slot):
         if profile not in (1, 2, 3) or not 0 <= slot < self.TABLE_SLOTS:
             raise ValueError("profile must be 1-3 and slot 0-23")
@@ -123,6 +128,9 @@ class SensitivityBlock:
         _verify(words, self.WORDS)
         if not 0 <= words[4] <= 4 or words[5] > words[4]:
             raise BlockError("unexpected sensitivity block layout")
+        for i in range(self.LEVELS_AT, self.LEVELS_AT + 3 * (words[4] + 1), 3):
+            if words[i] < 1 or words[i] != words[i + 1] or not words[i + 2] & 0x80:
+                raise BlockError("unexpected sensitivity block layout")
         self.words = words
 
     @property

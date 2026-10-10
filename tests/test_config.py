@@ -26,6 +26,14 @@ def test_set_button_rejects_left_click_and_unknown_names(mouse):
             config.set_button(block, name, actions.Disabled())
 
 
+def test_set_button_refuses_a_profile_that_shares_its_table(mouse):
+    block = mouse.read_buttons()
+    with pytest.raises(ValueError, match="shares its button table"):
+        config.set_button(block, "back", Key(0x06, 0x01), profile=2)
+    config.set_button(block, "back", Key(0x06, 0x01))
+    assert config.get_buttons(block)["back"] == Key(0x06, 0x01)
+
+
 def test_dpi(mouse):
     sens = mouse.read_sensitivity()
     assert config.get_dpi(sens) == [800, 1000, 1200, 1600, 3200]
@@ -74,6 +82,35 @@ def test_open_mouse_without_device(monkeypatch):
     monkeypatch.setattr(config, "find_devices", lambda: [])
     with pytest.raises(DeviceError, match="no Bloody mouse found"):
         config.open_mouse()
+
+
+def test_open_mouse_tries_each_device_until_one_is_supported(monkeypatch):
+    transports = []
+
+    class StubTransport:
+        def __init__(self, path):
+            self.path = path
+            self.model = 0x218 if path == "/dev/hidraw9" else 0x010
+            self.closed = False
+            transports.append(self)
+
+        def close(self):
+            self.closed = True
+
+    class StubMouse:
+        def __init__(self, transport, sleep=None):
+            self.t = transport
+
+        def info(self):
+            return {"model": self.t.model, "subtype": 0, "firmware": 0xF5}
+
+    monkeypatch.setattr(config, "find_devices",
+                        lambda: ["/dev/hidraw9", "/dev/hidraw12"])
+    monkeypatch.setattr(config, "HidrawTransport", StubTransport)
+    monkeypatch.setattr(config, "Mouse", StubMouse)
+    mouse = config.open_mouse()
+    assert mouse.t.path == "/dev/hidraw12"
+    assert transports[0].closed and not transports[1].closed
 
 
 def test_backups_made_in_the_same_second_do_not_overwrite_each_other(mouse, tmp_path):
