@@ -1,0 +1,9 @@
+[project]
+name = "bloodless"
+version = "0.1.0"
+description = "Configure A4Tech Bloody V7/V7M mice on Linux"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]

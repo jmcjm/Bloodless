@@ -1,0 +1,7 @@
+# Memory dumps and USB captures contain vendor firmware and device serials.
+dumps/*.txt
+captures/
+# Working documents, not deliverables.
+docs/superpowers/
+__pycache__/
+.pytest_cache/

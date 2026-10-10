@@ -1,0 +1,2 @@
+class FakeTransport:
+    pass
