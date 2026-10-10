@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Bloodless
+Comment=Configure A4Tech Bloody V7 and V7M mice
+Exec=bloodless-gui
+Icon=io.github.jmcjm.Bloodless
+Terminal=false
+Categories=Settings;HardwareSettings;GTK;
+Keywords=mouse;bloody;a4tech;dpi;buttons;

@@ -1,8 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bloodless"
 version = "0.1.0"
 description = "Configure A4Tech Bloody V7/V7M mice on Linux"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
+
+[project.scripts]
+bloodless = "bloodless.cli:main"
+
+[project.gui-scripts]
+bloodless-gui = "bloodless.gui:main"
+
+[tool.setuptools]
+packages = ["bloodless"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

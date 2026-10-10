@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.jmcjm.Bloodless</id>
+  <name>Bloodless</name>
+  <summary>Configure A4Tech Bloody V7 and V7M mice</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.jmcjm">
+    <name>Jakub Mendyka</name>
+  </developer>
+  <description>
+    <p>
+      Remap the side buttons and the three top buttons, set the DPI levels and the backlight
+      brightness of A4Tech Bloody V7 and V7M mice, without the vendor's Windows software.
+    </p>
+    <p>
+      Settings are stored in the mouse itself. Every change first saves a backup of the
+      current configuration.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.jmcjm.Bloodless.desktop</launchable>
+  <url type="homepage">https://github.com/jmcjm/Bloodless</url>
+  <url type="bugtracker">https://github.com/jmcjm/Bloodless/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-10"/>
+  </releases>
+</component>
