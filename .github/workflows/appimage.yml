@@ -33,7 +33,14 @@ jobs:
         run: |
           echo "VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" >> "$GITHUB_ENV"
       - name: Build
-        run: ./appimage-builder --recipe AppImageBuilder.yml --skip-test
+        # appimage-builder 1.1.0 bundles glibc but its fallback to the bundled copy does not
+        # start on current distributions (it fails even on the Ubuntu release it was built
+        # on). Declaring the bundled glibc as ancient makes the launcher always use the
+        # host's, which is what the "glibc 2.39+" requirement in the README describes.
+        run: |
+          ./appimage-builder --recipe AppImageBuilder.yml --skip-test --skip-appimage
+          sed -i 's/^APPDIR_LIBC_VERSION=.*/APPDIR_LIBC_VERSION=2.0/' AppDir/AppRun.env
+          ./appimage-builder --recipe AppImageBuilder.yml --skip-script --skip-build --skip-test
       - name: Smoke test
         # No mouse on the runner: reaching this message proves Python and the package start.
         run: |
