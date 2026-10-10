@@ -13,7 +13,9 @@ KEYS.update({str(d): 0x1E + (d - 1) % 10 for d in range(10)})
 KEYS.update({f"f{n}": 0x39 + n for n in range(1, 13)})
 KEYS.update({"enter": 0x28, "esc": 0x29, "backspace": 0x2A, "tab": 0x2B, "space": 0x2C,
              "insert": 0x49, "home": 0x4A, "pageup": 0x4B, "delete": 0x4C, "end": 0x4D,
-             "pagedown": 0x4E, "right": 0x4F, "left": 0x50, "down": 0x51, "up": 0x52})
+             "pagedown": 0x4E, "right": 0x4F, "left": 0x50, "down": 0x51, "up": 0x52,
+             "capslock": 0x39, "printscreen": 0x46, "scrolllock": 0x47, "pause": 0x48,
+             "menu": 0x65})
 # Modifiers double as standalone keys (HID E0-E3), so a button can send Ctrl alone.
 KEYS.update({"ctrl": 0xE0, "shift": 0xE1, "alt": 0xE2, "super": 0xE3})
 KEYS.update({"`": 0x35, "-": 0x2D, "=": 0x2E, "[": 0x2F, "]": 0x30, "\\": 0x31,

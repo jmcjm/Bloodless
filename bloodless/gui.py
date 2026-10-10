@@ -7,7 +7,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, GObject, Gtk  # noqa: E402
 
 from . import actions, choices, config, dpi  # noqa: E402
 from .actions import Key  # noqa: E402
@@ -19,34 +19,51 @@ BUTTON_TITLES = {"back": "Side button: back", "forward": "Side button: forward",
                  "top1": "Top button 1", "topn": "Top button N", "top3": "Top button 3"}
 ERRORS = (DeviceError, BlockError, WriteError, ValueError)
 
-# A full-size ANSI keyboard: each row is a list of (column, key, column span),
-# 15 units wide, like the physical layout. Modifier keys toggle combinations;
-# every other key is an ordinary key (at most one selected at a time).
-KEYBOARD_ROWS = [
-    [(0, "esc", 1)] + [(1 + i, f"f{1 + i}", 1) for i in range(12)],
-    [(0, "`", 1)] + [(1 + i, str(1 + i), 1) for i in range(10)]
-    + [(11, "-", 1), (12, "=", 1), (13, "backspace", 2)],
-    [(0, "tab", 2)] + [(2 + i, "qwertyuiop"[i], 1) for i in range(10)]
-    + [(12, "[", 1), (13, "]", 1), (14, "\\", 1)],
-    [(0 + i, "asdfghjkl"[i], 1) for i in range(9)]
-    + [(9, ";", 1), (10, "'", 1), (11, "enter", 4)],
-    [(0, "shift", 3)] + [(3 + i, "zxcvbnm"[i], 1) for i in range(7)]
-    + [(10, ",", 1), (11, ".", 1), (12, "/", 1)],
-    [(0, "ctrl", 2), (2, "super", 2), (4, "alt", 2), (6, "space", 9)],
-    [(12, "insert", 1), (13, "home", 1), (14, "pageup", 1)],
-    [(12, "delete", 1), (13, "end", 1), (14, "pagedown", 1)],
-    [(13, "up", 1)],
-    [(12, "left", 1), (13, "down", 1), (14, "right", 1)],
-]
+KEY_UNIT = 44  # pixels per keyboard unit, the pitch of a letter key
+KEY_GAP = 4
+
+
+def _row(y, x, *keys):
+    """Place keys left to right from x; a key is a name or (name, width in units)."""
+    placed = []
+    for key in keys:
+        name, width = key if isinstance(key, tuple) else (key, 1)
+        placed.append((x, y, width, name))
+        x += width
+    return placed
+
+
+# A standard ANSI (US / US International) tenkeyless keyboard as (x, y, width, key)
+# in keyboard units: a 15 unit wide main block with the navigation cluster beside it.
+# Modifier keys toggle combinations and appear on both sides; every other key is an
+# ordinary key (at most one selected at a time).
+MAIN_WIDTH = 15
+NAV_X = MAIN_WIDTH + 0.5
+KEYBOARD = (
+    _row(0, 0, "esc") + _row(0, 2, "f1", "f2", "f3", "f4")
+    + _row(0, 6.5, "f5", "f6", "f7", "f8") + _row(0, 11, "f9", "f10", "f11", "f12")
+    + _row(0, NAV_X, "printscreen", "scrolllock", "pause")
+    + _row(1.5, 0, "`", *"1234567890-=", ("backspace", 2))
+    + _row(1.5, NAV_X, "insert", "home", "pageup")
+    + _row(2.5, 0, ("tab", 1.5), *"qwertyuiop[]", ("\\", 1.5))
+    + _row(2.5, NAV_X, "delete", "end", "pagedown")
+    + _row(3.5, 0, ("capslock", 1.75), *"asdfghjkl;'", ("enter", 2.25))
+    + _row(4.5, 0, ("shift", 2.25), *"zxcvbnm,./", ("shift", 2.75))
+    + _row(4.5, NAV_X + 1, "up")
+    + _row(5.5, 0, ("ctrl", 1.25), ("super", 1.25), ("alt", 1.25), ("space", 6.25),
+           ("alt", 1.25), ("super", 1.25), ("menu", 1.25), ("ctrl", 1.25))
+    + _row(5.5, NAV_X, "left", "down", "right")
+)
 MODIFIER_KEYS = ("ctrl", "shift", "alt", "super")
-KEY_LABELS = {"esc": "Esc", "backspace": "Bksp", "tab": "Tab", "enter": "Enter",
-              "shift": "Shift", "ctrl": "Ctrl", "alt": "Alt", "super": "Super",
-              "space": "Space", "insert": "Ins", "home": "Home", "pageup": "PgUp",
-              "delete": "Del", "end": "End", "pagedown": "PgDn",
-              "up": "↑", "down": "↓", "left": "←", "right": "→"}
+KEY_LABELS = {"esc": "Esc", "backspace": "Backspace", "tab": "Tab", "enter": "Enter",
+              "capslock": "Caps Lock", "shift": "Shift", "ctrl": "Ctrl", "alt": "Alt",
+              "super": "Super", "menu": "Menu", "space": "", "insert": "Ins",
+              "home": "Home", "pageup": "PgUp", "delete": "Del", "end": "End",
+              "pagedown": "PgDn", "printscreen": "PrtSc", "scrolllock": "ScrLk",
+              "pause": "Pause", "up": "↑", "down": "↓", "left": "←", "right": "→"}
 KEY_LABELS.update({f"f{n}": f"F{n}" for n in range(1, 13)})
-# Compact keys so the whole keyboard fits the default window width.
-KEY_CSS = "button.key { padding: 0 2px; min-width: 20px; min-height: 22px; font-size: 75%; }"
+# Keys get their size from the layout, not from the theme's button padding.
+KEY_CSS = "button.key { padding: 0; min-width: 0; min-height: 0; font-weight: normal; }"
 
 
 def _install_key_css():
@@ -71,11 +88,15 @@ def demo_mouse():
                  sleep=lambda seconds: None)
 
 
-class KeyDialog(Adw.Dialog):
-    """Pick a key combination by clicking keys on a picture of a keyboard."""
+class KeyDialog(Adw.Window):
+    """Pick a key combination by clicking keys on a picture of a keyboard.
+
+    A window of its own, so the keyboard is not squeezed into the narrow main window.
+    """
 
     def __init__(self, window, name):
-        super().__init__(title="Choose keys")
+        super().__init__(title="Choose keys", transient_for=window, modal=True,
+                         resizable=False)
         self.window, self.name = window, name
         self.mod_toggles, self.key_toggles = {}, {}
         mods, key_name = [], None
@@ -91,32 +112,42 @@ class KeyDialog(Adw.Dialog):
                 if not mods and key_name in MODIFIER_KEYS:  # a lone modifier, e.g. "ctrl"
                     mods, key_name = [key_name], None
         _install_key_css()
-        grid = Gtk.Grid(row_spacing=3, column_spacing=3)
-        for r, row in enumerate(KEYBOARD_ROWS):
-            for c, key, span in row:
-                toggle = Gtk.ToggleButton(label=KEY_LABELS.get(key, key.upper()))
-                toggle.add_css_class("key")
-                grid.attach(toggle, c, r, span, 1)
-                if key in MODIFIER_KEYS:
-                    self.mod_toggles[key] = toggle
-                    toggle.set_active(key in mods)
-                    toggle.connect("toggled", self._on_toggled)
-                else:
-                    self.key_toggles[key] = toggle
-                    toggle.set_active(key == key_name)
-                    toggle.connect("toggled", self._on_key_toggled)
+        self.keyboard = Gtk.Fixed(halign=Gtk.Align.CENTER)
+        for x, y, width, key in KEYBOARD:
+            toggle = Gtk.ToggleButton(label=KEY_LABELS.get(key, key.upper()))
+            toggle.add_css_class("key")
+            toggle.set_size_request(int(width * KEY_UNIT) - KEY_GAP, KEY_UNIT - KEY_GAP)
+            self.keyboard.put(toggle, int(x * KEY_UNIT), int(y * KEY_UNIT))
+            if key in self.mod_toggles:  # the right-hand twin of a modifier
+                self.mod_toggles[key].bind_property(
+                    "active", toggle, "active",
+                    GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE)
+            elif key in MODIFIER_KEYS:
+                self.mod_toggles[key] = toggle
+                toggle.set_active(key in mods)
+                toggle.connect("toggled", self._on_toggled)
+            else:
+                self.key_toggles[key] = toggle
+                toggle.set_active(key == key_name)
+                toggle.connect("toggled", self._on_key_toggled)
         cancel = Gtk.Button(label="Cancel")
         cancel.connect("clicked", lambda _b: self.close())
         self.apply_button = Gtk.Button(label="Apply", css_classes=["suggested-action"])
         self.apply_button.connect("clicked", lambda _b: self.write_back())
-        buttons = Gtk.Box(spacing=6, halign=Gtk.Align.END)
-        buttons.append(cancel)
-        buttons.append(self.apply_button)
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
-                        margin_top=8, margin_bottom=8, margin_start=8, margin_end=8)
-        outer.append(grid)
-        outer.append(buttons)
-        self.set_child(outer)
+        header = Adw.HeaderBar(show_start_title_buttons=False, show_end_title_buttons=False)
+        header.pack_start(cancel)
+        header.pack_end(self.apply_button)
+        self.keyboard.set_margin_top(12)
+        self.keyboard.set_margin_bottom(12)
+        self.keyboard.set_margin_start(12)
+        self.keyboard.set_margin_end(12)
+        view = Adw.ToolbarView(content=self.keyboard)
+        view.add_top_bar(header)
+        self.set_content(view)
+        escape = Gtk.ShortcutController()
+        escape.add_shortcut(Gtk.Shortcut(trigger=Gtk.ShortcutTrigger.parse_string("Escape"),
+                                         action=Gtk.NamedAction.new("window.close")))
+        self.add_controller(escape)
         self._update()
 
     def _on_key_toggled(self, toggle):
@@ -217,7 +248,7 @@ class Window(Adw.ApplicationWindow):
 
     def open_key_dialog(self, name):
         dialog = KeyDialog(self, name)
-        dialog.present(self)
+        dialog.present()
         return dialog
 
     def _gtk_sleep(self, seconds):

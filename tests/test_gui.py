@@ -2,7 +2,8 @@ import gi
 import pytest
 
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib  # noqa: E402
+gi.require_version("Gtk", "4.0")
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from bloodless import actions, choices, config, gui  # noqa: E402
 
@@ -161,13 +162,72 @@ def test_the_save_pause_pumps_the_main_loop():
     drive(check)
 
 
-def test_key_dialog_fits_the_default_window_width():
+def test_keyboard_is_a_standard_ansi_layout():
+    rows = {}
+    for x, y, width, key in gui.KEYBOARD:
+        assert key in actions.KEYS
+        if x < gui.MAIN_WIDTH:
+            rows.setdefault(y, []).append((x, width, key))
+    function_row, *block = [rows[y] for y in sorted(rows)]
+    assert [key for _x, _width, key in function_row] == ["esc"] + [f"f{n}" for n in range(1, 13)]
+    for row in block:                                    # no gaps, no overlaps, 15 units wide
+        edge = 0
+        for x, width, _key in row:
+            assert x == edge
+            edge += width
+        assert edge == gui.MAIN_WIDTH
+    assert [[(key, width) for _x, width, key in row if width != 1] for row in block] == [
+        [("backspace", 2)],
+        [("tab", 1.5), ("\\", 1.5)],
+        [("capslock", 1.75), ("enter", 2.25)],
+        [("shift", 2.25), ("shift", 2.75)],
+        [("ctrl", 1.25), ("super", 1.25), ("alt", 1.25), ("space", 6.25),
+         ("alt", 1.25), ("super", 1.25), ("menu", 1.25), ("ctrl", 1.25)]]
+    assert "".join(key for row in block for _x, _width, key in row if len(key) == 1) == (
+        "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./")
+
+
+def test_key_dialog_is_a_window_of_its_own_with_full_size_keys():
     def check(window, _mouse):
-        window.button_rows["forward"][1].set_text("")
         dialog = window.new_key_dialog("forward")
-        _minimum, natural = dialog.get_child().get_preferred_size()
-        assert natural.width <= gui.Window.DEFAULT_WIDTH
-        assert natural.height <= gui.Window.DEFAULT_HEIGHT
+        assert isinstance(dialog, Gtk.Window)            # not clipped by the main window
+        assert dialog.get_transient_for() is window
+        assert dialog.get_modal()
+        _minimum, natural = dialog.keyboard.get_preferred_size()
+        assert natural.width > gui.Window.DEFAULT_WIDTH
+        toggle = dialog.keyboard.get_first_child()
+        count = 0
+        while toggle is not None:                        # no label pushes a key past its slot
+            wanted_width, wanted_height = toggle.get_size_request()
+            _minimum, natural = toggle.get_preferred_size()
+            assert (natural.width, natural.height) == (wanted_width, wanted_height)
+            assert wanted_width >= 40 and wanted_height >= 40
+            count += 1
+            toggle = toggle.get_next_sibling()
+        assert count == len(gui.KEYBOARD)
+
+    drive(check)
+
+
+def test_key_dialog_right_hand_modifiers_mirror_the_left_ones():
+    def check(window, _mouse):
+        window.button_rows["forward"][1].set_text("shift+a")
+        dialog = window.new_key_dialog("forward")
+        twins = {}
+        toggle = dialog.keyboard.get_first_child()
+        while toggle is not None:
+            twins.setdefault(toggle.get_label(), []).append(toggle)
+            toggle = toggle.get_next_sibling()
+        for label in ("Ctrl", "Shift", "Alt", "Super"):
+            assert len(twins[label]) == 2
+        assert all(toggle.get_active() for toggle in twins["Shift"])
+        left, right = twins["Ctrl"]
+        right.set_active(True)
+        assert left.get_active()
+        assert dialog.combo_text() == "ctrl+shift+a"
+        left.set_active(False)
+        assert not right.get_active()
+        assert dialog.combo_text() == "shift+a"
 
     drive(check)
 
