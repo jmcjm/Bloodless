@@ -1,0 +1,28 @@
+app-id: io.github.jmcjm.Bloodless
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: bloodless-gui
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  # The mouse is configured through its /dev/hidraw node; no narrower permission covers it.
+  - --device=all
+modules:
+  - name: bloodless
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=/app --no-deps --no-build-isolation .
+      - install -Dm644 data/io.github.jmcjm.Bloodless.desktop -t /app/share/applications
+      - install -Dm644 data/io.github.jmcjm.Bloodless.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 data/io.github.jmcjm.Bloodless.svg -t /app/share/icons/hicolor/scalable/apps
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - .flatpak-builder
+          - captures
+          - dumps
+          - docs
+          - AppDir

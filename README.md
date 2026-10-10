@@ -6,12 +6,19 @@ side buttons, the three top buttons, DPI levels and backlight brightness.
 Supported: firmware family `V_P3305_010` (reported as model `0x010`). Other Bloody models are
 refused; see `REVERSE_ENGINEERING.md` for how to add one.
 
-## Requirements
+## Install
 
-Python 3.11+, and for the window PyGObject with GTK 4 and libadwaita 1.5+.
+Builds are attached to every [release](https://github.com/jmcjm/Bloodless/releases) and to
+every run of the GitHub workflows:
 
-The mouse's hidraw node must be writable by your user. If `info` reports a permission error,
-install the udev rule and replug the mouse:
+- **Flatpak**: `flatpak install --user Bloodless.flatpak`, then `flatpak run io.github.jmcjm.Bloodless`.
+- **AppImage**: `chmod +x Bloodless-*.AppImage`, then run it. Without arguments it opens the
+  window; with arguments it is the command line (`./Bloodless-*.AppImage show`). It bundles
+  Ubuntu 24.04 libraries and needs a distribution with glibc 2.39 or newer.
+- **From source**: Python 3.11+, and for the window PyGObject with GTK 4 and libadwaita 1.5+.
+
+Whichever you use, the mouse's hidraw node must be writable by your user. If `info` reports a
+permission error, install the udev rule and replug the mouse:
 
 ```sh
 sudo cp data/70-bloodless.rules /etc/udev/rules.d/
@@ -21,7 +28,7 @@ sudo udevadm control --reload
 ## Use
 
 ```sh
-python3 -m bloodless.gui                 # window
+python3 -m bloodless                     # window
 python3 -m bloodless.cli info
 python3 -m bloodless.cli show
 python3 -m bloodless.cli set-button back key:ctrl+c

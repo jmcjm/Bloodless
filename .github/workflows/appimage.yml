@@ -1,0 +1,52 @@
+name: AppImage
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    # The bundle carries Ubuntu 24.04 libraries and runs on distributions with glibc 2.39+.
+    runs-on: ubuntu-24.04
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: 1
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils fakeroot desktop-file-utils libgdk-pixbuf2.0-dev \
+            patchelf squashfs-tools zsync gtk-update-icon-cache libglib2.0-bin
+      - name: Get appimage-builder
+        run: |
+          wget -q -O appimage-builder \
+            https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          echo "4b4f99cae9291d78ba12dbdabca7c0a67c72aa61eb2e5d424089171a9485e96f  appimage-builder" | sha256sum -c
+          chmod +x appimage-builder
+      - name: Read version
+        run: |
+          echo "VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')" >> "$GITHUB_ENV"
+      - name: Build
+        run: ./appimage-builder --recipe AppImageBuilder.yml --skip-test
+      - name: Smoke test
+        # No mouse on the runner: reaching this message proves Python and the package start.
+        run: |
+          chmod +x Bloodless-*.AppImage
+          ./Bloodless-*.AppImage info 2>&1 | tee smoke.log || true
+          grep -q "no Bloody mouse found" smoke.log
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Bloodless-AppImage
+          path: Bloodless-*.AppImage
+          if-no-files-found: error
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Bloodless-*.AppImage

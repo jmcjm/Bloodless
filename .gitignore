@@ -5,3 +5,10 @@ captures/
 docs/superpowers/
 __pycache__/
 .pytest_cache/
+# Build output
+AppDir/
+appimage-build/
+*.AppImage
+.flatpak-builder/
+build/
+*.egg-info/
