@@ -9,6 +9,8 @@ finish-args:
   - --socket=fallback-x11
   # The mouse is configured through its /dev/hidraw node; no narrower permission covers it.
   - --device=all
+  # Lets the "Grant access" button run pkexec on the host to install the udev rule.
+  - --talk-name=org.freedesktop.Flatpak
 modules:
   - name: bloodless
     buildsystem: simple

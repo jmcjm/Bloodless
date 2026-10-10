@@ -308,3 +308,128 @@ def test_silent_mouse_is_asked_only_once():
         assert [row.get_subtitle() for row in window.dpi_rows] == ["", "", "", "", "In use"]
 
     drive(check)
+
+
+def window_without_access(application):
+    """A window whose mouse refuses access until the udev rule is 'installed'."""
+    from bloodless.transport import AccessDenied
+
+    mouse = gui.demo_mouse()
+    state = {"granted": False}
+
+    def open_mouse():
+        if not state["granted"]:
+            raise AccessDenied("cannot open /dev/hidraw5: Permission denied")
+        return mouse
+
+    return gui.Window(application, open_mouse), state
+
+
+class FakeProcess:
+    """Stands in for the pkexec process: finishes at once with the given exit status."""
+
+    def __init__(self, status, stderr="", on_run=None):
+        self.status, self.stderr, self.on_run = status, stderr, on_run
+
+    def communicate_utf8_async(self, _stdin, _cancellable, callback):
+        if self.on_run:
+            self.on_run()
+        callback(self, None)
+
+    def communicate_utf8_finish(self, _result):
+        return True, None, self.stderr
+
+    def get_if_exited(self):
+        return True
+
+    def get_exit_status(self):
+        return self.status
+
+
+def run_in_app(check):
+    app = Adw.Application(application_id="io.github.jmcjm.BloodlessTest")
+    failures = []
+
+    def activate(application):
+        try:
+            check(application)
+        except Exception as e:
+            failures.append(e)
+        application.quit()
+
+    app.connect("activate", activate)
+    app.run([])
+    if failures:
+        raise failures[0]
+
+
+def test_banner_offers_to_grant_access_only_when_access_is_denied():
+    def check(application):
+        window, _state = window_without_access(application)
+        assert window.access_banner.get_revealed()
+        assert "Permission denied" in window.device_row.get_subtitle()
+        assert not gui.Window(application, gui.demo_mouse).access_banner.get_revealed()
+
+    run_in_app(check)
+
+
+def test_granting_access_installs_the_rule_and_loads_the_mouse():
+    def check(application):
+        window, state = window_without_access(application)
+        spawned = []
+
+        def spawn(argv):
+            spawned.append(argv)
+            return FakeProcess(0, on_run=lambda: state.update(granted=True))
+
+        window.install_udev_rule(spawn)
+        assert spawned == [gui.udev.install_command()]
+        assert window.mouse is not None
+        assert not window.access_banner.get_revealed()
+        assert not window.busy
+        assert window.device_row.get_subtitle() == "model 0x010, firmware F5"
+
+    run_in_app(check)
+
+
+def test_dismissed_password_prompt_keeps_the_banner_and_unlocks_the_window():
+    def check(application):
+        window, _state = window_without_access(application)
+        window.install_udev_rule(lambda argv: FakeProcess(126, "Request dismissed"))
+        assert window.mouse is None
+        assert window.access_banner.get_revealed()
+        assert not window.busy
+        assert window.apply_button.get_sensitive()
+
+    run_in_app(check)
+
+
+def test_missing_pkexec_is_reported_and_unlocks_the_window():
+    def check(application):
+        window, _state = window_without_access(application)
+
+        def spawn(argv):
+            raise GLib.Error("Failed to execute child process “pkexec”")
+
+        window.install_udev_rule(spawn)
+        assert not window.busy
+        assert window.access_banner.get_revealed()
+
+    run_in_app(check)
+
+
+def test_granting_access_runs_a_real_process_without_blocking_the_window():
+    """The real spawn path, with a harmless command in place of pkexec."""
+    def check(application):
+        window, _state = window_without_access(application)
+        window.install_udev_rule(
+            lambda argv: window._spawn_on_host(["sh", "-c", "echo no such luck >&2; exit 3"]))
+        assert window.busy  # the call returned while the process is still being waited for
+        context = GLib.main_context_default()
+        deadline = GLib.get_monotonic_time() + 5_000_000
+        while window.busy and GLib.get_monotonic_time() < deadline:
+            context.iteration(True)
+        assert not window.busy
+        assert window.access_banner.get_revealed()
+
+    run_in_app(check)

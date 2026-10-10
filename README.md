@@ -13,17 +13,15 @@ every run of the GitHub workflows:
 
 - **Flatpak**: `flatpak install --user Bloodless.flatpak`, then `flatpak run io.github.jmcjm.Bloodless`.
 - **AppImage**: `chmod +x Bloodless-*.AppImage`, then run it. Without arguments it opens the
-  window; with arguments it is the command line (`./Bloodless-*.AppImage show`). It bundles
-  Ubuntu 24.04 libraries and needs a distribution with glibc 2.39 or newer.
+  window; with arguments it is the command line (`./Bloodless-*.AppImage show`). It carries
+  its own Python, GTK and C library; tested on Debian 12, Ubuntu 24.04 and Fedora 44 (the
+  command line also on Debian 11).
 - **From source**: Python 3.11+, and for the window PyGObject with GTK 4 and libadwaita 1.5+.
 
-Whichever you use, the mouse's hidraw node must be writable by your user. If `info` reports a
-permission error, install the udev rule and replug the mouse:
-
-```sh
-sudo cp data/70-bloodless.rules /etc/udev/rules.d/
-sudo udevadm control --reload
-```
+Whichever you use, your user must be allowed to open the mouse's hidraw node. If it is not,
+the window shows a "Grant access" button and the command line suggests
+`install-udev-rule`; both ask for administrator rights once and install the udev rule from
+`data/70-bloodless.rules`, without replugging the mouse.
 
 ## Use
 
@@ -36,6 +34,7 @@ python3 -m bloodless.cli set-button top1 dpi-up
 python3 -m bloodless.cli set-dpi 2 1000
 python3 -m bloodless.cli backlight 2
 python3 -m bloodless.cli backup
+python3 -m bloodless.cli install-udev-rule
 python3 -m bloodless.cli restore ~/.local/state/bloodless/backups/20261010-220000.txt
 ```
 

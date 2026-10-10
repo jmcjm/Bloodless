@@ -7,13 +7,13 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
-from . import actions, choices, config, dpi  # noqa: E402
+from . import actions, choices, config, dpi, udev  # noqa: E402
 from .actions import Key  # noqa: E402
 from .blocks import BlockError  # noqa: E402
 from .protocol import Mouse, WriteError  # noqa: E402
-from .transport import DeviceError  # noqa: E402
+from .transport import AccessDenied, DeviceError  # noqa: E402
 
 BUTTON_TITLES = {"back": "Side button: back", "forward": "Side button: forward",
                  "top1": "Top button 1", "topn": "Top button N", "top3": "Top button 3"}
@@ -237,8 +237,12 @@ class Window(Adw.ApplicationWindow):
         for group in (device_group, button_group, dpi_group, light_group):
             page.add(group)
         self.toasts = Adw.ToastOverlay(child=page)
+        self.access_banner = Adw.Banner(title="Your user is not allowed to access the mouse",
+                                        button_label="Grant access")
+        self.access_banner.connect("button-clicked", lambda _b: self.install_udev_rule())
         view = Adw.ToolbarView(content=self.toasts)
         view.add_top_bar(header)
+        view.add_top_bar(self.access_banner)
         self.set_content(view)
         self.reload()
         # Follow DPI button presses while the window is open.
@@ -287,7 +291,9 @@ class Window(Adw.ApplicationWindow):
         except ERRORS as e:
             self.mouse = None
             self.device_row.set_subtitle(str(e))
+            self.access_banner.set_revealed(isinstance(e, AccessDenied))
             return
+        self.access_banner.set_revealed(False)
         self.device_row.set_subtitle(
             f"model 0x{info['model']:03x}, firmware {info['firmware']:02X}")
         self.original = config.get_buttons(self.buttons)
@@ -304,6 +310,39 @@ class Window(Adw.ApplicationWindow):
         self.backlight_row.set_value(self.backlight)
         self.level_reports = True
         self.refresh_current_level()
+
+    def install_udev_rule(self, spawn=None):
+        """Install the udev rule with administrator rights, then try the mouse again."""
+        self._set_busy(True)
+        try:
+            process = (spawn or self._spawn_on_host)(udev.install_command())
+        except GLib.Error as e:
+            self._udev_rule_done(f"could not ask for administrator rights: {e.message}")
+            return
+        process.communicate_utf8_async(None, None, self._on_udev_rule_exit)
+
+    def _spawn_on_host(self, argv):
+        launcher = Gio.SubprocessLauncher.new(Gio.SubprocessFlags.STDERR_PIPE)
+        launcher.set_environ([f"{k}={v}" for k, v in udev.host_env().items()])
+        return launcher.spawnv(argv)
+
+    def _on_udev_rule_exit(self, process, result):
+        try:
+            _ok, _out, stderr = process.communicate_utf8_finish(result)
+        except GLib.Error as e:
+            self._udev_rule_done(e.message)
+            return
+        status = process.get_exit_status() if process.get_if_exited() else 1
+        self._udev_rule_done(udev.failure(status, stderr or ""))
+
+    def _udev_rule_done(self, problem):
+        self._set_busy(False)
+        if problem:
+            self.toast(f"Error: {problem}")
+            return
+        self.reload()
+        if self.mouse is not None:
+            self.toast("Access granted")
 
     def refresh_current_level(self):
         """Mark the DPI level the mouse is using."""

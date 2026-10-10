@@ -13,6 +13,10 @@ class DeviceError(OSError):
     """No usable mouse, or talking to it failed."""
 
 
+class AccessDenied(DeviceError):
+    """The mouse is there, but this user may not open its hidraw node."""
+
+
 def find_devices(sys_root="/sys/class/hidraw"):
     """Paths of /dev/hidrawN nodes that are the vendor interface of an A4Tech device."""
     found = []
@@ -31,6 +35,8 @@ class HidrawTransport:
     def __init__(self, path):
         try:
             self.fd = os.open(path, os.O_RDWR)
+        except PermissionError as e:
+            raise AccessDenied(f"cannot open {path}: {e.strerror}") from e
         except OSError as e:
             raise DeviceError(f"cannot open {path}: {e.strerror}") from e
 

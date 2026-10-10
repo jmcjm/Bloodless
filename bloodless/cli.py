@@ -2,10 +2,10 @@
 import argparse
 import sys
 
-from . import actions, config
+from . import actions, config, udev
 from .blocks import BlockError
 from .protocol import WriteError
-from .transport import DeviceError
+from .transport import AccessDenied, DeviceError
 
 
 def build_parser():
@@ -28,6 +28,8 @@ def build_parser():
     sub.add_parser("backup", help="save both config blocks to a file")
     restore = sub.add_parser("restore", help="write back a file made by backup")
     restore.add_argument("path")
+    sub.add_parser("install-udev-rule",
+                   help="let your user access the mouse (asks for administrator rights)")
     return p
 
 
@@ -75,7 +77,14 @@ def run(args, mouse, out):
 def main(argv=None, mouse=None, out=sys.stdout, err=sys.stderr):
     args = build_parser().parse_args(argv)
     try:
-        run(args, mouse or config.open_mouse(), out)
+        if args.command == "install-udev-rule":
+            udev.install()
+            print(f"installed {udev.RULE_PATH}", file=out)
+        else:
+            run(args, mouse or config.open_mouse(), out)
+    except AccessDenied as e:
+        print(f"error: {e}\nRun the install-udev-rule command to grant access.", file=err)
+        return 1
     except (DeviceError, BlockError, WriteError, ValueError, OSError) as e:
         print(f"error: {e}", file=err)
         return 1
