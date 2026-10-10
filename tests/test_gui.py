@@ -2,7 +2,7 @@ import gi
 import pytest
 
 gi.require_version("Adw", "1")
-from gi.repository import Adw  # noqa: E402
+from gi.repository import Adw, GLib  # noqa: E402
 
 from bloodless import actions, choices, config, gui  # noqa: E402
 
@@ -105,3 +105,57 @@ def test_window_without_mouse_shows_the_error():
     app.connect("activate", activate)
     app.run([])
     assert seen == ["no Bloody mouse found (is it plugged in?)"]
+
+
+def test_saving_is_visible_while_writing():
+    def check(window, mouse):
+        assert mouse.sleep == window._gtk_sleep      # the GUI pumps GTK while the mouse pauses
+        assert not window.spinner.get_spinning()
+        assert not window.spinner.get_visible()
+        seen = []
+
+        def spy(_seconds):
+            seen.append((window.spinner.get_spinning(), window.spinner.get_visible(),
+                         window.apply_button.get_sensitive(),
+                         window.reload_button.get_sensitive()))
+
+        mouse.sleep = spy
+        window.button_rows["forward"][1].set_text("ctrl+shift+t")
+        window.apply()
+        assert seen
+        assert all(spinning and visible and not apply_sensitive and not reload_sensitive
+                   for spinning, visible, apply_sensitive, reload_sensitive in seen)
+        assert not window.spinner.get_spinning()
+        assert not window.spinner.get_visible()
+        assert window.apply_button.get_sensitive()
+        assert window.reload_button.get_sensitive()
+        assert described(mouse)["forward"] == "key:ctrl+shift+t"
+
+    drive(check)
+
+
+def test_failed_apply_stops_the_spinner_and_unlocks_the_buttons():
+    def check(window, mouse):
+        window.button_rows["forward"][1].set_text("garbage+")
+        window.apply()
+        assert not window.spinner.get_spinning()
+        assert not window.spinner.get_visible()
+        assert window.apply_button.get_sensitive()
+        assert window.reload_button.get_sensitive()
+
+    drive(check)
+
+
+def test_the_save_pause_pumps_the_main_loop():
+    def check(window, mouse):
+        ran = []
+
+        def idle():
+            ran.append(True)
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(idle)
+        window._gtk_sleep(0.05)
+        assert ran == [True]
+
+    drive(check)

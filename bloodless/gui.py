@@ -1,12 +1,13 @@
 """GTK4/libadwaita window: python3 -m bloodless.gui [--demo]."""
 import sys
+import time
 from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk  # noqa: E402
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from . import choices, config, dpi  # noqa: E402
 from .blocks import BlockError  # noqa: E402
@@ -40,7 +41,11 @@ class Window(Adw.ApplicationWindow):
         apply_button.connect("clicked", lambda _b: self.apply())
         reload_button = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Reload")
         reload_button.connect("clicked", lambda _b: self.reload())
+        self.apply_button, self.reload_button = apply_button, reload_button
+        self.spinner = Gtk.Spinner()
+        self.spinner.set_visible(False)  # GTK4 widgets are visible by default
         header = Adw.HeaderBar()
+        header.pack_start(self.spinner)
         header.pack_start(reload_button)
         header.pack_end(apply_button)
 
@@ -86,12 +91,29 @@ class Window(Adw.ApplicationWindow):
     def on_choice_changed(self, combo, _param, entry):
         entry.set_visible(combo.get_selected() == choices.KEY_INDEX)
 
+    def _gtk_sleep(self, seconds):
+        """Sleep like time.sleep, but keep the UI alive by pumping the main loop."""
+        end = time.time() + seconds
+        context = GLib.main_context_default()
+        while time.time() < end:
+            if context.pending():
+                context.iteration(False)
+            else:
+                time.sleep(0.01)
+
+    def _set_busy(self, busy):
+        self.spinner.set_visible(busy)
+        self.spinner.set_spinning(busy)
+        self.apply_button.set_sensitive(not busy)
+        self.reload_button.set_sensitive(not busy)
+
     def toast(self, text):
         self.toasts.add_toast(Adw.Toast(title=text))
 
     def reload(self):
         try:
             self.mouse = self.open_mouse()
+            self.mouse.sleep = self._gtk_sleep
             info = self.mouse.info()
             self.buttons = self.mouse.read_buttons()
             self.sens = self.mouse.read_sensitivity()
@@ -119,6 +141,7 @@ class Window(Adw.ApplicationWindow):
         if self.mouse is None:
             self.toast("No mouse connected")
             return
+        self._set_busy(True)
         try:
             wanted = {name: choices.action_for(combo.get_selected(), entry.get_text(),
                                                self.original[name])
@@ -142,12 +165,13 @@ class Window(Adw.ApplicationWindow):
                 self.mouse.write_sensitivity(self.sens)
             if backlight != self.backlight:
                 self.mouse.set_backlight(backlight)
+            self.reload()
+            self.toast("Saved to mouse")
         except ERRORS as e:
             self.toast(f"Error: {e}")
             self.reload()
-            return
-        self.reload()
-        self.toast("Saved to mouse")
+        finally:
+            self._set_busy(False)
 
 
 def main(argv=None):
