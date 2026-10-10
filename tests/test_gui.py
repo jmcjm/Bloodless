@@ -161,6 +161,17 @@ def test_the_save_pause_pumps_the_main_loop():
     drive(check)
 
 
+def test_key_dialog_fits_the_default_window_width():
+    def check(window, _mouse):
+        window.button_rows["forward"][1].set_text("")
+        dialog = window.new_key_dialog("forward")
+        _minimum, natural = dialog.get_child().get_preferred_size()
+        assert natural.width <= gui.Window.DEFAULT_WIDTH
+        assert natural.height <= gui.Window.DEFAULT_HEIGHT
+
+    drive(check)
+
+
 def test_key_dialog_builds_a_combo_from_toggles():
     def check(window, _mouse):
         window.button_rows["forward"][1].set_text("")   # open on an empty combination

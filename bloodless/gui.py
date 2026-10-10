@@ -7,7 +7,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, Gtk  # noqa: E402
 
 from . import actions, choices, config, dpi  # noqa: E402
 from .actions import Key  # noqa: E402
@@ -19,15 +19,24 @@ BUTTON_TITLES = {"back": "Side button: back", "forward": "Side button: forward",
                  "top1": "Top button 1", "topn": "Top button N", "top3": "Top button 3"}
 ERRORS = (DeviceError, BlockError, WriteError, ValueError)
 
-# Rows of an ordinary physical keyboard (QWERTY); names are actions.KEYS names.
+# A full-size ANSI keyboard: each row is a list of (column, key, column span),
+# 15 units wide, like the physical layout. Modifier keys toggle combinations;
+# every other key is an ordinary key (at most one selected at a time).
 KEYBOARD_ROWS = [
-    ("esc", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"),
-    ("`", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=", "backspace"),
-    ("tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "[", "]", "\\"),
-    ("a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "enter"),
-    ("shift", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/"),
-    ("ctrl", "alt", "space", "super"),
-    ("insert", "home", "pageup", "up", "delete", "end", "pagedown", "left", "down", "right"),
+    [(0, "esc", 1)] + [(1 + i, f"f{1 + i}", 1) for i in range(12)],
+    [(0, "`", 1)] + [(1 + i, str(1 + i), 1) for i in range(10)]
+    + [(11, "-", 1), (12, "=", 1), (13, "backspace", 2)],
+    [(0, "tab", 2)] + [(2 + i, "qwertyuiop"[i], 1) for i in range(10)]
+    + [(12, "[", 1), (13, "]", 1), (14, "\\", 1)],
+    [(0 + i, "asdfghjkl"[i], 1) for i in range(9)]
+    + [(9, ";", 1), (10, "'", 1), (11, "enter", 4)],
+    [(0, "shift", 3)] + [(3 + i, "zxcvbnm"[i], 1) for i in range(7)]
+    + [(10, ",", 1), (11, ".", 1), (12, "/", 1)],
+    [(0, "ctrl", 2), (2, "super", 2), (4, "alt", 2), (6, "space", 9)],
+    [(12, "insert", 1), (13, "home", 1), (14, "pageup", 1)],
+    [(12, "delete", 1), (13, "end", 1), (14, "pagedown", 1)],
+    [(13, "up", 1)],
+    [(12, "left", 1), (13, "down", 1), (14, "right", 1)],
 ]
 MODIFIER_KEYS = ("ctrl", "shift", "alt", "super")
 KEY_LABELS = {"esc": "Esc", "backspace": "Bksp", "tab": "Tab", "enter": "Enter",
@@ -36,7 +45,18 @@ KEY_LABELS = {"esc": "Esc", "backspace": "Bksp", "tab": "Tab", "enter": "Enter",
               "delete": "Del", "end": "End", "pagedown": "PgDn",
               "up": "↑", "down": "↓", "left": "←", "right": "→"}
 KEY_LABELS.update({f"f{n}": f"F{n}" for n in range(1, 13)})
-SPACE_COLUMNS = 6  # the space bar spans several key widths, like on a real keyboard
+# Compact keys so the whole keyboard fits the default window width.
+KEY_CSS = "button.key { padding: 0 2px; min-width: 20px; min-height: 22px; font-size: 75%; }"
+
+
+def _install_key_css():
+    provider = Gtk.CssProvider()
+    try:
+        provider.load_from_string(KEY_CSS)
+    except AttributeError:  # GTK < 4.12
+        provider.load_from_data(KEY_CSS.encode())
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider,
+                                              Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
 def demo_mouse():
@@ -70,15 +90,13 @@ class KeyDialog(Adw.Dialog):
                 key_name = next((n for n, u in actions.KEYS.items() if u == action.usage), None)
                 if not mods and key_name in MODIFIER_KEYS:  # a lone modifier, e.g. "ctrl"
                     mods, key_name = [key_name], None
-        grid = Gtk.Grid(row_spacing=6, column_spacing=6)
+        _install_key_css()
+        grid = Gtk.Grid(row_spacing=3, column_spacing=3)
         for r, row in enumerate(KEYBOARD_ROWS):
-            c = 0
-            for key in row:
-                label = KEY_LABELS.get(key, key.upper())
-                width = SPACE_COLUMNS if key == "space" else 1
-                toggle = Gtk.ToggleButton(label=label, hexpand=True)
-                grid.attach(toggle, c, r, width, 1)
-                c += width
+            for c, key, span in row:
+                toggle = Gtk.ToggleButton(label=KEY_LABELS.get(key, key.upper()))
+                toggle.add_css_class("key")
+                grid.attach(toggle, c, r, span, 1)
                 if key in MODIFIER_KEYS:
                     self.mod_toggles[key] = toggle
                     toggle.set_active(key in mods)
@@ -95,7 +113,7 @@ class KeyDialog(Adw.Dialog):
         buttons.append(cancel)
         buttons.append(self.apply_button)
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
-                        margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
+                        margin_top=8, margin_bottom=8, margin_start=8, margin_end=8)
         outer.append(grid)
         outer.append(buttons)
         self.set_child(outer)
@@ -128,8 +146,12 @@ class KeyDialog(Adw.Dialog):
 
 
 class Window(Adw.ApplicationWindow):
+    DEFAULT_WIDTH = 520
+    DEFAULT_HEIGHT = 760
+
     def __init__(self, app, open_mouse):
-        super().__init__(application=app, title="Bloodless", default_width=1020, default_height=760)
+        super().__init__(application=app, title="Bloodless", default_width=self.DEFAULT_WIDTH,
+                         default_height=self.DEFAULT_HEIGHT)
         self.open_mouse = open_mouse
         self.mouse = None
 
