@@ -2,6 +2,7 @@
 import fcntl
 import glob
 import os
+import select
 
 REPORT = 72
 _HIDIOCSFEATURE = (3 << 30) | (REPORT << 16) | (ord("H") << 8) | 0x06
@@ -48,6 +49,14 @@ class HidrawTransport:
         except OSError as e:
             raise DeviceError(f"read from mouse failed: {e.strerror}") from e
         return bytes(buf)
+
+    def read_input(self, timeout):
+        """One input report from the mouse, or None if none arrives within timeout seconds."""
+        try:
+            ready, _, _ = select.select([self.fd], [], [], timeout)
+            return os.read(self.fd, 64) if ready else None
+        except OSError as e:
+            raise DeviceError(f"read from mouse failed: {e.strerror}") from e
 
     def close(self):
         os.close(self.fd)

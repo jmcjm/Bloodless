@@ -87,3 +87,40 @@ def test_backlight(mouse, transport):
 def test_backlight_out_of_range(mouse, level):
     with pytest.raises(ValueError):
         mouse.set_backlight(level)
+
+def test_current_level_follows_the_mouse(mouse, transport):
+    assert mouse.current_level() == 0
+    transport.level = 3  # what a press of the DPI button does
+    assert mouse.current_level() == 3
+
+
+def test_current_level_ignores_reports_queued_earlier(mouse, transport):
+    transport.inputs.append(bytes([7, 1, 1, 0, 0, 0, 7, 0, 0, 0, 0, 2, 4, 1, 0, 0]))
+    assert mouse.current_level() == 0
+
+
+def test_current_level_skips_reports_of_another_kind(mouse, transport):
+    original = transport.send
+
+    def send(payload):
+        if bytes(payload)[1] == 0x0C and not transport.inputs:
+            transport.inputs.append(bytes([7, 1, 0xF1, 0, 0, 0, 7, 0, 0, 0, 0, 2, 8, 1, 0, 0]))
+            transport.sent.append(bytes(payload))
+            transport.send = original
+            return
+        original(payload)
+
+    transport.send = send
+    transport.level = 2
+    assert mouse.current_level() == 2
+
+
+def test_current_level_is_none_when_the_mouse_stays_silent(mouse, transport):
+    transport.silent = True
+    assert mouse.current_level() is None
+
+
+def test_writing_sensitivity_keeps_the_selected_level_in_use(mouse, transport):
+    transport.level = 4
+    mouse.write_sensitivity(mouse.read_sensitivity())
+    assert mouse.current_level() == 0

@@ -185,6 +185,8 @@ class Window(Adw.ApplicationWindow):
                          default_height=self.DEFAULT_HEIGHT)
         self.open_mouse = open_mouse
         self.mouse = None
+        self.busy = False
+        self.level_reports = True
 
         apply_button = Gtk.Button(label="Apply", css_classes=["suggested-action"])
         apply_button.connect("clicked", lambda _b: self.apply())
@@ -239,6 +241,9 @@ class Window(Adw.ApplicationWindow):
         view.add_top_bar(header)
         self.set_content(view)
         self.reload()
+        # Follow DPI button presses while the window is open.
+        timer = GLib.timeout_add_seconds(1, self._tick)
+        self.connect("close-request", lambda _w: GLib.source_remove(timer) and False)
 
     def on_choice_changed(self, combo, _param, entry):
         entry.set_visible(combo.get_selected() == choices.KEY_INDEX)
@@ -262,6 +267,7 @@ class Window(Adw.ApplicationWindow):
                 time.sleep(0.01)
 
     def _set_busy(self, busy):
+        self.busy = busy
         self.spinner.set_visible(busy)
         self.spinner.set_spinning(busy)
         self.apply_button.set_sensitive(not busy)
@@ -296,6 +302,29 @@ class Window(Adw.ApplicationWindow):
             if n < len(levels):
                 row.set_value(levels[n])
         self.backlight_row.set_value(self.backlight)
+        self.level_reports = True
+        self.refresh_current_level()
+
+    def refresh_current_level(self):
+        """Mark the DPI level the mouse is using."""
+        if self.mouse is None or self.busy:  # never interleave with a block write
+            return
+        current = self.sens.selected
+        if self.level_reports:
+            try:
+                reported = self.mouse.current_level()
+            except ERRORS:
+                return
+            if reported is None:
+                self.level_reports = False  # do not stall the UI asking a silent mouse
+            elif reported < self.sens.count:
+                current = reported
+        for n, row in enumerate(self.dpi_rows):
+            row.set_subtitle("In use" if n == current else "")
+
+    def _tick(self):
+        self.refresh_current_level()
+        return True
 
     def apply(self):
         if self.mouse is None:

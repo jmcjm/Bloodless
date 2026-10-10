@@ -12,6 +12,10 @@ class FakeTransport:
         self.sent = []
         self.writing = False
         self.corrupt_writes = False
+        self.level = sensitivity[5]  # DPI level in use; a real mouse changes it on button press
+        self.reporting = False
+        self.silent = False  # a mouse that never sends status reports
+        self.inputs = []
         self._reply = bytes(REPORT)
 
     def load(self, base, words):
@@ -34,6 +38,12 @@ class FakeTransport:
             if p[4] == 0x80:
                 self.backlight = p[8]
             reply[8] = self.backlight
+        elif op == 0x09:
+            self.reporting = p[8] == 0x01
+        elif op == 0x0D:
+            self.level = p[9]
+        elif op == 0x0C and self.reporting and not self.silent:
+            self.inputs.append(bytes([7, 1, 1, 0, 0, 0, 7, 0, 0, 0, 0, 2, self.level, 1, 0, 0]))
         elif op == 0x20:
             self.writing = p[7] == 0x01
         elif op == 0x2F and p[2] == 0x79 and self.writing:
@@ -50,6 +60,9 @@ class FakeTransport:
     def query(self, payload):
         self.send(payload)
         return self._reply
+
+    def read_input(self, timeout):
+        return self.inputs.pop(0) if self.inputs else None
 
     def close(self):
         pass

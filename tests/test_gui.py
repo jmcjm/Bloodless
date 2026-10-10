@@ -275,3 +275,36 @@ def test_keys_dialog_apply_writes_the_choice_to_the_entry():
         assert window.button_rows["forward"][1].get_text() == "ctrl+v"
         window.apply()
         assert described(mouse)["forward"] == "key:ctrl+v"
+
+def test_dpi_level_in_use_is_marked_and_follows_the_mouse():
+    def check(window, mouse):
+        marks = lambda: [row.get_subtitle() for row in window.dpi_rows]  # noqa: E731
+        assert marks() == ["", "", "", "", "In use"]  # the fixture has level 5 selected
+        mouse.t.level = 1
+        window.refresh_current_level()
+        assert marks() == ["", "In use", "", "", ""]
+
+    drive(check)
+
+
+def test_level_refresh_never_runs_during_a_write():
+    def check(window, mouse):
+        window.busy = True
+        mouse.t.sent.clear()
+        window.refresh_current_level()
+        assert mouse.t.sent == []
+
+    drive(check)
+
+
+def test_silent_mouse_is_asked_only_once():
+    def check(window, mouse):
+        mouse.t.silent = True
+        window.reload()
+        asked = len([f for f in mouse.t.sent if f[1] == 0x0C])
+        window.refresh_current_level()
+        window.refresh_current_level()
+        assert len([f for f in mouse.t.sent if f[1] == 0x0C]) == asked
+        assert [row.get_subtitle() for row in window.dpi_rows] == ["", "", "", "", "In use"]
+
+    drive(check)

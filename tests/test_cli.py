@@ -104,3 +104,15 @@ def test_restore_missing_file_is_an_error_message(mouse, tmp_path):
     code, _out, err = run(mouse, "restore", str(tmp_path / "nope.txt"))
     assert code == 1
     assert err.startswith("error: ")
+
+
+def test_show_marks_the_level_the_mouse_is_using(mouse, transport):
+    transport.level = 2
+    out = run(mouse, "show")[1]
+    assert "dpi 3    1200 (selected)" in out
+    assert out.count("(selected)") == 1
+
+
+def test_show_falls_back_to_the_stored_level_when_the_mouse_stays_silent(mouse, transport):
+    transport.silent = True
+    assert "dpi 1    800 (selected)" in run(mouse, "show")[1]

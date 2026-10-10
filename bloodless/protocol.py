@@ -7,6 +7,8 @@ UNLOCK = bytes.fromhex("072500005249182201")
 # Sent by the vendor app after every button block write; kept verbatim.
 _AFTER_BUTTONS = ["070e800000000000006464646400", "070f00000000000007",
                   "070c0000000000000280010000"]
+_REPORTS_ON = bytes.fromhex("070900000000000001")
+_STATUS_REQUEST = bytes.fromhex("070c0000000000000280010000")
 
 
 class WriteError(RuntimeError):
@@ -75,6 +77,27 @@ class Mouse:
         a, r = block.get_level(block.selected)
         self.t.send([0x07, 0x0D, 0, 0, 0, 0, 0, 0, block.count - 1, block.selected, a, a,
                      0x80 | r, block.rate])
+
+    def current_level(self):
+        """0-based DPI level in use right now, or None if the mouse does not report it.
+
+        The mouse answers a status request with an input report, but only while reporting
+        is switched on; byte 12 of that report is the level, also after a DPI button press.
+        """
+        self.t.send(_REPORTS_ON)
+        while self.t.read_input(0) is not None:  # drop reports queued before this request
+            pass
+        for _attempt in range(3):  # the first report after switching on is of another kind
+            self.t.send(_STATUS_REQUEST)
+            level = None
+            report = self.t.read_input(0.1)
+            while report is not None:
+                if len(report) > 12 and report[:3] == b"\x07\x01\x01":
+                    level = report[12]
+                report = self.t.read_input(0)
+            if level is not None:
+                return level
+        return None
 
     def get_backlight(self):
         return self.t.query([0x07, 0x11])[8]

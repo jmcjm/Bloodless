@@ -58,6 +58,12 @@ def get_dpi(sens):
     return [dpi.raw_to_dpi(*sens.get_level(i)) for i in range(sens.count)]
 
 
+def current_level(mouse, sens):
+    """0-based DPI level in use: what the mouse reports, else what the block says."""
+    level = mouse.current_level()
+    return level if level is not None and level < sens.count else sens.selected
+
+
 def set_dpi(sens, level, value):
     """level is 1-based, as shown to the user."""
     sens.set_level(level - 1, *dpi.dpi_to_raw(value))

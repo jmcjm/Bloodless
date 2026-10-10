@@ -40,8 +40,9 @@ def run(args, mouse, out):
         for name, action in config.get_buttons(mouse.read_buttons(), args.profile).items():
             print(f"{name:8} {actions.describe(action)}", file=out)
         sens = mouse.read_sensitivity()
+        selected = config.current_level(mouse, sens)
         for n, value in enumerate(config.get_dpi(sens), start=1):
-            marker = " (selected)" if n - 1 == sens.selected else ""
+            marker = " (selected)" if n - 1 == selected else ""
             print(f"dpi {n}    {value}{marker}", file=out)
         print(f"backlight {mouse.get_backlight()}", file=out)
     elif args.command == "set-button":
